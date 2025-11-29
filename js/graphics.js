@@ -112,15 +112,36 @@ export class Graphics {
         // Use the new simplified generation method
         const group = this.terrainVisuals.generateChunkVisuals(chunkData, nextChunkData);
 
-        // Add Nodes and Edges (Logic remains similar but simplified here for brevity, 
-        // essentially just re-adding the nodes on top of the terrain)
+        // Find the terrain mesh for height sampling
+        const terrainMesh = group.children.find(c => c.material === this.assets.terrainMaterial);
+        const up = new THREE.Vector3(0, 1, 0);
+        const down = new THREE.Vector3(0, -1, 0);
+
+        // Add Nodes
         
         chunkData.nodes.forEach(node => {
             const mesh = new THREE.Mesh(this.assets.nodeGeometry, this.assets.nodeMaterial.clone());
-            // Adjust y slightly to ensure it sits on visual mesh? 
-            // The visual mesh is smoothed, but node.y is raw.
-            // Ideally we'd sample the visual mesh height, but raw is close enough for nodes.
-            mesh.position.set(node.x, node.y + 0.1, node.z);
+            
+            let pos = new THREE.Vector3(node.x, node.y, node.z);
+            let normal = new THREE.Vector3(0, 1, 0);
+
+            if (terrainMesh) {
+                this.raycaster.set(new THREE.Vector3(node.x, 100, node.z), down);
+                const intersects = this.raycaster.intersectObject(terrainMesh);
+                if (intersects.length > 0) {
+                    const hit = intersects[0];
+                    pos.copy(hit.point);
+                    normal.copy(hit.face.normal);
+                    
+                    // Sync logical height with visual height
+                    node.y = pos.y; 
+                }
+            }
+            
+            // Align mesh to surface normal and place flush
+            mesh.quaternion.setFromUnitVectors(up, normal);
+            mesh.position.copy(pos).addScaledVector(normal, 0.2);
+
             mesh.userData = { isNode: true, id: node.id, ...node };
             
             if (node.id === 'node_start') mesh.material.emissive.setHex(0x00ff88);
